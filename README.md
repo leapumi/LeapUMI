@@ -1,16 +1,22 @@
-# LeapUMI: Learning Dexterous Robot Manipulation Policies without a Robot Arm
-<!--
-**leapumi/LeapUMI** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+<h1 align="center" style="font-size: 3em;">LeapUMI: Learning Dexterous Robot Manipulation Policies without a Robot Arm</h1>
 
-Here are some ideas to get you started:
+[[Project page]](https://dex-umi.github.io)
+[Paper]
+[Deployment guide]
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
-Details in src/README.md
+<img width="90%" src="assets/main.png">
+
+## Hardware Platform
+<img width="80%" src="assets/devices.png">
+
+## Experiments
+#### Real-world manipulation tasks
+<img width="80%" src="assets/tasks.png">
+
+#### Diverse-scene experiments
+<img width="80%" src="assets/diverse.png">
+
+Representative panoramic observations collected --> Robot  trained executions.
+
+## Deployment Guide
+Refer to leapumi.md
