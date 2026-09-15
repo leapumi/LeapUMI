@@ -1,5 +1,4 @@
-## Hi there 👋
-
+# LeapUMI: Learning Dexterous Robot Manipulation Policies without a Robot Arm
 <!--
 **leapumi/LeapUMI** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
@@ -14,3 +13,4 @@ Here are some ideas to get you started:
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
 -->
+Details in src/README.md
