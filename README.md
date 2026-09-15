@@ -1,6 +1,6 @@
 <h1 align="center" style="font-size: 3em;">LeapUMI: Learning Dexterous Robot Manipulation Policies without a Robot Arm</h1>
 
-[[Project page]](https://dex-umi.github.io)
+[[Project page]](https://leapumi.github.io)
 [Paper]
 [[Deployment guide]](https://github.com/leapumi/LeapUMI/blob/main/leapumi.md)
 
