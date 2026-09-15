@@ -8,6 +8,8 @@ Run the following commands from the workspace root:
 
 ```bash
 export WS=/home/donglzh/leapumi_workspace
+mkdir -p "$WS"
+git clone https://github.com/leapumi/LeapUMI.git "$WS/src"
 cd "$WS"
 ```
 
@@ -48,6 +50,12 @@ Prepare the following:
 - Camera drivers that publish the following topics. This repository only subscribes to these topics; it does not include their publisher nodes.
   - `/insta360/image_raw` of type `sensor_msgs/Image`. Its encoding must be convertible to `rgb8` by `CvBridge`.
   - `/camera/odom/sample` of type `nav_msgs/Odometry`, published by a T265 or equivalent tracking node.
+
+Ensure the LEAP Hand udev rules are installed. If the serial port needs temporary access permissions, run:
+
+```bash
+sudo chmod 777 /dev/ttyUSB*
+```
 
 Verify that sensor data is available:
 
@@ -137,7 +145,7 @@ Each episode is saved as `leap_action_<id>.hdf5` and contains `actions`, T265 po
 
 The recorder creates one HDF5 file per episode. Before training, inspect, crop/preprocess, and then convert the data to a Zarr Zip file. All scripts below are in `data_process`:
 
-1. Use `hdf5_image_view.py` to inspect raw recordings. Its GUI lets you switch between demos and frames and view images, arm state, end-effector pose, LEAP Hand state, and actions.
+1. Use `hdf5_image_view.py` to inspect raw recordings and determine the first and last valid frame for every selected demonstration. Its GUI lets you switch between demos and frames and view images, arm state, end-effector pose, LEAP Hand state, and actions.
 
    ```bash
    cd "$WS/src/data_process"
@@ -145,7 +153,14 @@ The recorder creates one HDF5 file per episode. Before training, inspect, crop/p
    python hdf5_image_view.py /absolute/path/leap_action_0.hdf5
    ```
 
-2. Use `data_transfer_crop.py` to select data, crop episodes, and perform training-time preprocessing. Configure `input_dir`, `output_file`, `crop_range_txt`, `skip`, and `norm_gripper` at the top of the file. Each line in `crop_ranges.txt` follows `demo_id [start_frame] end_frame`; the end frame is included. The script merges selected episodes and performs the following operations: resizes images to `92×92`, renames/converts `eef_rot` to `eef_quat` in `wxyz` order, and converts 23-dimensional actions (position 3 + `xyzw` quaternion 4 + hand 16) to 22-dimensional actions (position 3 + axis-angle 3 + hand 16).
+2. Fill the frame ranges found in step 1 into `crop_ranges.txt`, which is configured through `crop_range_txt` at the top of `data_transfer_crop.py`. Each line is `demo_id start_frame end_frame`; the end frame is included. For example:
+
+   ```text
+   0 12 240
+   1 0 180
+   ```
+
+   Configure `input_dir`, `output_file`, `skip`, and `norm_gripper` at the top of the script, then use `data_transfer_crop.py` to select data, crop episodes, and perform training-time preprocessing. It merges selected episodes and resizes images to `92×92`, renames/converts `eef_rot` to `eef_quat` in `wxyz` order, and converts 23-dimensional actions (position 3 + `xyzw` quaternion 4 + hand 16) to 22-dimensional actions (position 3 + axis-angle 3 + hand 16).
 
    ```bash
    cd "$WS/src/data_process"
@@ -162,7 +177,8 @@ The recorder creates one HDF5 file per episode. Before training, inspect, crop/p
    conda activate umi
    python convert_hdf5_to_zarr.py \
      /absolute/path/training_dataset.hdf5 \
-     /absolute/path/training_dataset.zarr.zip
+     /absolute/path/training_dataset.zarr.zip \
+     --split
    ```
 
    By default, the converter prints the dataset structure and statistics after conversion. Add `--no-verify` to skip this verification step.
@@ -194,7 +210,7 @@ Training code is located in `universal_manipulation_interface`. The example belo
 
 Training and deployment in this project use `train_diffusion_unet_timm_leapumi_workspace.yaml`. It selects `task: leapumi_split` by default, and the corresponding task configuration file is present. Leave this setting unchanged.
 
-`leapumi_split` requires two `224×224` image keys in the Zarr file: `camera0_rgb_left` and `camera0_rgb_right`. The current `data_process/convert_hdf5_to_zarr.py` writes only `camera0_rgb`, so its output cannot be used with this training configuration directly. Before training, split the wide image into equal left and right halves using the same convention as real deployment, and write both image keys.
+`leapumi_split` requires two `224×224` image keys in the Zarr file: `camera0_rgb_left` and `camera0_rgb_right`. Pass `--split` to `data_process/convert_hdf5_to_zarr.py` to resize frames to `224×448` and split them into these two keys. Without `--split`, the converter writes the full `224×448` image as `camera0_rgb`.
 
 ### 2.2 Training
 
@@ -230,6 +246,12 @@ Deployment requires:
 - An Insta360 node publishing `/insta360/image_raw`.
 - A Kinova driver providing joint-state feedback and the action server.
 
+Ensure the LEAP Hand udev rules are installed. If the serial port needs temporary access permissions, run:
+
+```bash
+sudo chmod 777 /dev/ttyUSB*
+```
+
 Start ROS in terminal A:
 
 ```bash
@@ -247,7 +269,15 @@ source "$WS/devel/setup.bash"
 roslaunch kinova_bringup kinova_robot.launch kinova_robotType:=j2n6s300
 ```
 
-After starting the Insta360 ROS driver in terminal C, run these checks:
+Start the Insta360 ROS driver in terminal C (replace this example with the command for your installed driver if needed):
+
+```bash
+source /opt/ros/noetic/setup.bash
+source "$WS/devel/setup.bash"
+roslaunch jsk_perception sample_insta360_air.launch
+```
+
+Then run these checks:
 
 ```bash
 rostopic echo -n 1 /j2n6s300_driver/out/joint_state

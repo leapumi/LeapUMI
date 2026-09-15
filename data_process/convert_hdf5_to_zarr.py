@@ -2,10 +2,14 @@
 Convert HDF5 dataset to Zarr format compatible with UMI training pipeline.
 
 Usage:
-    python convert_hdf5_to_zarr.py <input.hdf5> <output.zarr.zip>
+    python convert_hdf5_to_zarr.py <input.hdf5> <output.zarr.zip> [--split]
 
 Example:
+    # Write one 224x448 image as camera0_rgb
     python convert_hdf5_to_zarr.py dataset.hdf5 dataset.zarr.zip
+
+    # Split a 224x448 image into two 224x224 images
+    python convert_hdf5_to_zarr.py dataset.hdf5 dataset.zarr.zip --split
 
 Input HDF5 structure:
     /data/demo_0/
@@ -19,7 +23,10 @@ Input HDF5 structure:
 
 Output Zarr structure:
     /data/
-        - camera0_rgb: (Total_N, H, W, 3)
+        - camera0_rgb: (Total_N, 224, 448, 3), without --split
+          or
+        - camera0_rgb_left: (Total_N, 224, 224, 3), with --split
+        - camera0_rgb_right: (Total_N, 224, 224, 3), with --split
         - robot0_eef_pos: (Total_N, 3)
         - robot0_eef_rot_axis_angle: (Total_N, 3) [axis-angle]
         - robot0_gripper_width: (Total_N, 16)
@@ -39,6 +46,7 @@ import argparse
 import h5py
 import zarr
 import numpy as np
+import cv2
 from scipy.spatial.transform import Rotation
 from tqdm import tqdm
 
@@ -46,6 +54,11 @@ from diffusion_policy.codecs.imagecodecs_numcodecs import register_codecs
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 
 register_codecs()
+
+
+IMAGE_HEIGHT = 224
+IMAGE_WIDTH = 448
+SPLIT_IMAGE_WIDTH = IMAGE_WIDTH // 2
 
 
 def quat_wxyz_to_axis_angle(quat_wxyz):
@@ -71,7 +84,38 @@ def quat_wxyz_to_axis_angle(quat_wxyz):
     return axis_angle.reshape(original_shape + (3,))
 
 
-def load_hdf5_dataset(hdf5_path):
+def prepare_camera_images(images, split):
+    """Resize HWC RGB frames to 224x448 and optionally split them in half."""
+    images = np.asarray(images)
+    if images.ndim != 4 or images.shape[-1] != 3:
+        raise ValueError(
+            "agentview_image must have shape (N, H, W, 3); "
+            f"got {images.shape}"
+        )
+
+    if images.shape[1:3] == (IMAGE_HEIGHT, IMAGE_WIDTH):
+        wide_images = images
+    else:
+        wide_images = np.stack([
+            cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT), interpolation=cv2.INTER_AREA)
+            for image in images
+        ])
+
+    wide_images = np.ascontiguousarray(wide_images)
+    if not split:
+        return {'camera0_rgb': wide_images}
+
+    return {
+        'camera0_rgb_left': np.ascontiguousarray(
+            wide_images[:, :, :SPLIT_IMAGE_WIDTH, :]
+        ),
+        'camera0_rgb_right': np.ascontiguousarray(
+            wide_images[:, :, SPLIT_IMAGE_WIDTH:, :]
+        ),
+    }
+
+
+def load_hdf5_dataset(hdf5_path, split_images=False):
     """
     Load HDF5 dataset and organize it into episodes
     
@@ -130,11 +174,11 @@ def load_hdf5_dataset(hdf5_path):
             eef_rot_axis_angle = quat_wxyz_to_axis_angle(eef_quat)
             
             episode = {
-                'camera0_rgb': agentview_image,
                 'robot0_eef_pos': eef_pos,
                 'robot0_eef_rot_axis_angle': eef_rot_axis_angle,
                 'robot0_gripper_width': gripper_qpos,
             }
+            episode.update(prepare_camera_images(agentview_image, split_images))
             
             # Add demo start and end pose
             # Start pose: first frame's [pos(3), rot(3)] = 6D
@@ -158,7 +202,7 @@ def load_hdf5_dataset(hdf5_path):
     return episodes, total_frames
 
 
-def create_zarr_dataset(episodes, output_path):
+def create_zarr_dataset(episodes, output_path, split_images=False):
     """
     Create Zarr dataset from episodes
     
@@ -185,13 +229,17 @@ def create_zarr_dataset(episodes, output_path):
             # Convert to float32 for consistency
             # Note: 'action' is NOT included
             episode_data = {
-                'camera0_rgb': episode['camera0_rgb'],  # Keep as uint8
                 'robot0_eef_pos': episode['robot0_eef_pos'].astype(np.float32),
                 'robot0_eef_rot_axis_angle': episode['robot0_eef_rot_axis_angle'].astype(np.float32),
                 'robot0_gripper_width': episode['robot0_gripper_width'].astype(np.float32),
                 'robot0_demo_start_pose': episode['robot0_demo_start_pose'].astype(np.float32),
                 'robot0_demo_end_pose': episode['robot0_demo_end_pose'].astype(np.float32),
             }
+            if split_images:
+                episode_data['camera0_rgb_left'] = episode['camera0_rgb_left']
+                episode_data['camera0_rgb_right'] = episode['camera0_rgb_right']
+            else:
+                episode_data['camera0_rgb'] = episode['camera0_rgb']
             
             # Use default compressors (JPEG-XL for images)
             replay_buffer.add_episode(data=episode_data, compressors='disk')
@@ -257,7 +305,9 @@ def verify_zarr_dataset(zarr_path):
         
         # Check first episode
         print(f"\n【First Episode Sample】")
-        print(f"  camera0_rgb[0]: shape={data_group['camera0_rgb'][0].shape}")
+        for image_key in ('camera0_rgb', 'camera0_rgb_left', 'camera0_rgb_right'):
+            if image_key in data_group:
+                print(f"  {image_key}[0]: shape={data_group[image_key][0].shape}")
         print(f"  robot0_eef_pos[0]: {data_group['robot0_eef_pos'][0]}")
         print(f"  robot0_eef_rot_axis_angle[0]: {data_group['robot0_eef_rot_axis_angle'][0]}")
         print(f"  robot0_gripper_width[0]: shape={data_group['robot0_gripper_width'][0].shape}")
@@ -286,6 +336,14 @@ def main():
         action='store_true',
         help='Skip verification after conversion'
     )
+    parser.add_argument(
+        '--split',
+        action='store_true',
+        help=(
+            'Resize frames to 224x448 and write camera0_rgb_left and '
+            'camera0_rgb_right (224x224 each) instead of camera0_rgb'
+        )
+    )
     
     args = parser.parse_args()
     
@@ -303,10 +361,10 @@ def main():
         os.remove(args.output_zarr)
     
     # Load HDF5 dataset
-    episodes, total_frames = load_hdf5_dataset(args.input_hdf5)
+    episodes, total_frames = load_hdf5_dataset(args.input_hdf5, split_images=args.split)
     
     # Create Zarr dataset
-    create_zarr_dataset(episodes, args.output_zarr)
+    create_zarr_dataset(episodes, args.output_zarr, split_images=args.split)
     
     # Verify dataset
     if not args.no_verify:
