@@ -4,7 +4,7 @@
 [Paper]
 [[Deployment guide]](https://github.com/leapumi/LeapUMI/blob/main/leapumi.md)
 
-# Method
+# 🧩 Method
 
 <img width="90%" src="assets/main.png">
 
