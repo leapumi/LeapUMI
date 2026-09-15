@@ -2,7 +2,7 @@
 
 [[Project page]](https://dex-umi.github.io)
 [Paper]
-[Deployment guide]
+[[Deployment guide]](https://github.com/leapumi/LeapUMI/blob/main/leapumi.md)
 
 <img width="90%" src="assets/main.png">
 
@@ -19,4 +19,4 @@
 Representative panoramic observations collected --> Robot  trained executions.
 
 ## Deployment Guide
-Refer to leapumi.md
+Refer to [leapumi.md](https://github.com/leapumi/LeapUMI/blob/main/leapumi.md)
