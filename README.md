@@ -9,15 +9,6 @@
 ## 🛠️ Hardware Platform
 <img width="80%" src="assets/devices.png">
 
-## 🧪 Experiments
-#### Real-world manipulation tasks
-<img width="80%" src="assets/tasks.png">
-
-#### Diverse-scene experiments
-<img width="80%" src="assets/diverse.png">
-
-Representative panoramic observations collected --> Robot  trained executions.
-
 ## 🚀 Deployment Guide
 
 This is a short end-to-end guide for collecting LeapUMI demonstrations, training a diffusion policy, and deploying it on a Kinova J2N6S300 arm with a LEAP Hand. For prerequisites, data-processing details, and troubleshooting, see the complete [deployment guide](leapumi.md).
